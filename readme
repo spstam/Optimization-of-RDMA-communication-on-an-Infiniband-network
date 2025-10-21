@@ -1,0 +1,57 @@
+Report times:
+Version 1:
+Changed the receive/send samples to send 1000 messages of 256 bytes and counted the time
+
+Observations: In send/ receive its easy to add more messages because the offset doesnt have to change from sender. 
+the receiver does the work of choosing where to save it
+
+  --- BENCHMARK RESULTS ---
+  Total data sent: 0.24 MB
+  Elapsed time:    2.0215 seconds
+  Throughput:      0.0010 Gbps
+  -------------------------
+
+Version 2:
+for buffers of 4096B 200 messages in order to fit:
+In this version receiver has bigger buffers
+
+-- BENCHMARK RESULTS ---
+Total data sent: 0.78 MB
+Elapsed time:    1.3200 seconds
+Throughput:      0.0050 Gbps
+-------------------------
+(same as v1 just change max_buf_size to 4096 the biggest possible without having to change the rdma_common.c)
+
+Version 3:
+Pipelining 8 tasks:
+--- BENCHMARK RESULTS ---
+Total data sent: 0.78 MB
+Elapsed time:    1.2952 seconds
+Throughput:      0.0051 Gbps
+-------------------------
+
+Pipelining 16 tasks:
+--- BENCHMARK RESULTS ---
+Total data sent: 0.78 MB
+Elapsed time:    0.8130 seconds
+Throughput:      0.0081 Gbps
+-------------------------
+
+Pipelining 32 tasks:
+--- BENCHMARK RESULTS ---
+Total data sent: 0.78 MB
+Elapsed time:    0.5709 seconds
+Throughput:      0.0115 Gbps
+-------------------------
+
+Pipelining 64 tasks:
+--- BENCHMARK RESULTS ---
+Total data sent: 0.78 MB
+Elapsed time:    1.4171 seconds
+Throughput:      0.0046 Gbps
+-------------------------
+
+
+We observe that at this point optiml is 32, but later as i decrease cpu overhead this number may decrease.
+
+
