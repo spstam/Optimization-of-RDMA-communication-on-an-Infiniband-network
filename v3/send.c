@@ -371,8 +371,9 @@ static void rdma_send_state_change_callback(const union doca_data user_data,
             result = rdma_send_prepare_and_submit_task(resources);
             if (result != DOCA_SUCCESS){
 			    DOCA_LOG_ERR("rdma_send_prepare_and_submit_task() failed: %s", doca_error_get_descr(result));
-		        break;}
+		        }
         }
+		break;
 		// if (result != DOCA_SUCCESS)
 		// 	DOCA_LOG_ERR("rdma_send_prepare_and_submit_task() failed: %s", doca_error_get_descr(result));
 		// break;
