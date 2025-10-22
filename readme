@@ -52,6 +52,22 @@ Throughput:      0.0046 Gbps
 -------------------------
 
 
-We observe that at this point optiml is 32, but later as i decrease cpu overhead this number may decrease.
+We observe that at this point optimal is 32, but later as i decrease cpu overhead this number may decrease.
+
+Version 4:
+
+Moved to rdma_write and added a send message from  the writer so when writing finished it lets the receiver know.
+--- BENCHMARK RESULTS ---
+Total data sent: 3.81 MB
+Elapsed time:    0.1266 seconds
+Throughput:      0.2528 Gbps
+-------------------------
+
+
+
+
+
+
+
 
 
