@@ -30,6 +30,8 @@ Elapsed time:    1.2952 seconds
 Throughput:      0.0051 Gbps
 -------------------------
 
+as the messagesize increases the throughput increases. MAX until now, 4,kati otan messagesize=16000 and 1000 messages
+
 Pipelining 16 tasks:
 --- BENCHMARK RESULTS ---
 Total data sent: 0.78 MB
