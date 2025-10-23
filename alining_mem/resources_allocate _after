@@ -1,0 +1,20 @@
+...
+void *memrange_ptr = NULL;
+        int ret = posix_memalign(&memrange_ptr, 64, MEM_RANGE_LEN);
+        if (ret != 0){
+                DOCA_LOG_ERR("FAILED TO ALLOCATE MEM");
+                result = DOCA_ERROR_NO_MEMORY;
+                goto close_doca_dev;
+        }
+        memset(memrange_ptr, 0 , MEM_RANGE_LEN);
+        resources->mmap_memrange = memrange_ptr;
+        ///////////////////////////////////
+        /* Allocate memory for memory range */
+        //resources->mmap_memrange = calloc(MEM_RANGE_LEN, sizeof(*resources->mmap_memrange));
+        if (resources->mmap_memrange == NULL) {
+                DOCA_LOG_ERR("Failed to allocate memory for mmap_memrange: %s", doca_error_get_descr(result));
+                result = DOCA_ERROR_NO_MEMORY;
+                goto close_doca_dev;
+
+        }
+...
