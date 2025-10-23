@@ -1,0 +1,16 @@
+in common.h
+struct rdma_resources {
+    // ... existing members
+    char *remote_mmap_range;
+    size_t remote_mmap_range_len;
+};
+
+
+in setup function (cm_requester_setup_and_submit):
+// After doca_mmap_create_from_export is successful...
+result = doca_mmap_get_memrange(resources->remote_mmap,
+                                (void **)&resources->remote_mmap_range,
+                                &resources->remote_mmap_range_len);
+if (result != DOCA_SUCCESS) {
+    // Handle error
+}
