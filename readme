@@ -1,9 +1,6 @@
 Report times:
 Version 1:
-Changed the receive/send samples to send 1000 messages of 256 bytes and counted the time
-
-Observations: In send/ receive its easy to add more messages because the offset doesnt have to change from sender. 
-the receiver does the work of choosing where to save it
+Changed the receive/send samples to send 1000 messages of 256 bytes and counted the time.
 
   --- BENCHMARK RESULTS ---
   Total data sent: 0.24 MB
@@ -12,7 +9,7 @@ the receiver does the work of choosing where to save it
   -------------------------
 
 Version 2:
-for buffers of 4096B 200 messages in order to fit:
+for buffers of 4096B 200 messages:
 In this version receiver has bigger buffers
 
 -- BENCHMARK RESULTS ---
@@ -20,7 +17,8 @@ Total data sent: 0.78 MB
 Elapsed time:    1.3200 seconds
 Throughput:      0.0050 Gbps
 -------------------------
-(same as v1 just change max_buf_size to 4096 the biggest possible without having to change the rdma_common.c)
+(same as v1 just change max_buf_size to 4096 the biggest possible without having to change the rdma_common.h)
+In the rdma_common.h there is a defined var for the space of the mmap. There is also one for the number of tasks to be run at th esame time
 
 Version 3:
 Pipelining 8 tasks:
@@ -30,7 +28,7 @@ Elapsed time:    1.2952 seconds
 Throughput:      0.0051 Gbps
 -------------------------
 
-as the messagesize increases the throughput increases. MAX until now, 4,kati otan messagesize=16000 and 1000 messages
+as the message size increases the throughput increases. MAX until now, 4,kati otan messagesize=16000 and 1000 messages
 
 Pipelining 16 tasks:
 --- BENCHMARK RESULTS ---
@@ -56,17 +54,32 @@ Throughput:      0.0046 Gbps
 
 We observe that at this point optimal is 32, but later as i decrease cpu overhead this number may decrease.
 
+NOTE: There was an error in this version that did not allow for the pipelining to work. I do not know why there is a difference in performance. (it has to do with the -cm flag in state change callback) 
+
 Version 4:
 
-Moved to rdma_write and added a send message from  the writer so when writing finished it lets the receiver know.
+Moved to rdma_write and added a send message from the writer so when writing finished it lets the receiver know, instead of waiting for enter.
 --- BENCHMARK RESULTS ---
 Total data sent: 3.81 MB
 Elapsed time:    0.1266 seconds
 Throughput:      0.2528 Gbps
 -------------------------
 
+Version 5:
+Added pipelining and changed the exporting of the map. The exporting was happening every time, now it happens only one. Added a function for initialising everything for the -cm flag.
 
+I observed for some reason the pipelining cannot reach a depth bigger than 8. Still trying to figure that out. Probably a bug.
+Till now fastest time 4,3 Gb/s at message size of 16000 and 1000 messages
 
+Questions:
+-> What size of messages and how many for the benchmark test.
+-> I also saw that the cards have approx 35G free ram. How much of that to use for the tests.
+-> What should be the structure of the test. Where should the messages be sent to. Same locations or different ones and also does the receiver need to read them (suppose not)?
+-> I start counting when i am in the fuction that calls the func that submits the first task. Is that correct?
+-> I messure time from sender and finish counting when the confirmation message is sent.
+-> Should i continue developing the samples or should i try and make something from 0. I am still learning for now.
+-> The sent message is using the last memspace.
+-> What happens with keys. I remember you told me about keys but i just use offset. How to structure my app to use keys and to be more correct.
 
 
 
