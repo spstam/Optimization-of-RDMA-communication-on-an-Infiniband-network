@@ -21,3 +21,10 @@ Total data sent: 61035.16 MB
 Elapsed time:    5.9053 seconds
 Throughput:      86.7012 Gbps
 -------------------------
+yet still we see massive difference in consecutive tests
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4921 seconds
+Throughput:      113.9788 Gbps
+-------------------------
