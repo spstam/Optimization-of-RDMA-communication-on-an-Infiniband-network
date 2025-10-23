@@ -1,0 +1,208 @@
+128M 1 message:
+--- BENCHMARK RESULTS ---
+Total data sent: 122.07 MB
+Elapsed time:    0.0222 seconds
+Throughput:      46.0813 Gbps
+-------------------------
+
+128 M 2 messages pipeline 4:
+--- BENCHMARK RESULTS ---
+Total data sent: 244.14 MB
+Elapsed time:    0.0343 seconds
+Throughput:      59.6385 Gbps
+-------------------------
+
+128 M 4 messages pipeline 4:
+--- BENCHMARK RESULTS ---
+Total data sent: 488.28 MB
+Elapsed time:    0.0652 seconds
+Throughput:      62.7986 Gbps
+-------------------------
+
+128 M 8 messages pipeline 8:
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1039 seconds
+Throughput:      78.8207 Gbps
+-------------------------
+
+250 M 4 messages pipeline 8:
+--- BENCHMARK RESULTS ---
+Total data sent: 953.67 MB
+Elapsed time:    0.0987 seconds
+Throughput:      81.0844 Gbps
+-------------------------
+
+250M 2 messages pipeline 8:
+--- BENCHMARK RESULTS ---
+Total data sent: 476.84 MB
+Elapsed time:    0.0657 seconds
+Throughput:      60.8663 Gbps
+-------------------------
+
+64 M 16 messages pipeline 8:
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.0862 seconds
+Throughput:      95.0067 Gbps
+-------------------------
+
+
+64 M 8 messages pipeline 8: 
+--- BENCHMARK RESULTS ---
+Total data sent: 488.28 MB
+Elapsed time:    0.0700 seconds
+Throughput:      58.5447 Gbps
+-------------------------
+
+32 M 32 messages pipeline 8 memory 1G:
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.0900 seconds
+Throughput:      90.9923 Gbps
+-------------------------
+
+32 M 32 messages pipeline 8 memory 2G:
+
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1138 seconds
+Throughput:      71.9794 Gbps
+-------------------------
+
+32 M 64 messages pipeline 8 memory 2G:
+--- BENCHMARK RESULTS ---
+Total data sent: 1953.12 MB
+Elapsed time:    0.2162 seconds
+Throughput:      75.7898 Gbps
+-------------------------
+
+64 M 32 messages pipeline 8 memory 2G:
+--- BENCHMARK RESULTS ---
+Total data sent: 1953.12 MB
+Elapsed time:    0.2582 seconds
+Throughput:      63.4460 Gbps
+-------------------------
+
+128 M 16 messages pipeline 8 memory 2G:
+--- BENCHMARK RESULTS ---
+Total data sent: 1953.12 MB
+Elapsed time:    0.2442 seconds
+Throughput:      67.0904 Gbps
+-------------------------
+
+256 M 8 messages pipeline 8 memory 2G:
+--- BENCHMARK RESULTS ---
+Total data sent: 1953.12 MB
+Elapsed time:    0.2156 seconds
+Throughput:      75.9833 Gbps
+-------------------------
+
+512 M 4 messages pipeline 8 memory 2G:
+--- BENCHMARK RESULTS ---
+Total data sent: 1953.12 MB
+Elapsed time:    0.2260 seconds
+Throughput:      72.4955 Gbps
+-------------------------
+
+1024 M 2 messages pipeline 8 memory 2G:
+--- BENCHMARK RESULTS ---
+Total data sent: 1953.12 MB
+Elapsed time:    0.2426 seconds
+Throughput:      67.5276 Gbps
+-------------------------
+
+2*10^9 in 1 message pipeline 8 memory 2G:
+error
+
+8M 128 messages pipeline 8 mem 1G:
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1319 seconds
+Throughput:      62.1089 Gbps
+-------------------------
+
+32M 32 messages pipeline 8 mem 1G:
+  --- BENCHMARK RESULTS ---
+  Total data sent: 976.56 MB
+  Elapsed time:    0.1143 seconds
+  Throughput:      71.6503 Gbps
+  -------------------------
+  --- BENCHMARK RESULTS ---
+  Total data sent: 976.56 MB
+  Elapsed time:    0.0881 seconds
+  Throughput:      92.9990 Gbps
+  --- BENCHMARK RESULTS ---
+  Total data sent: 976.56 MB
+  Elapsed time:    0.0956 seconds
+  Throughput:      85.7180 Gbps
+  -------------------------
+
+
+64M 16 messages pipeline 8:
+
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.0969 seconds
+Throughput:      84.5567 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1033 seconds
+Throughput:      79.2757 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.0885 seconds
+Throughput:      92.5222 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1133 seconds
+Throughput:      72.3062 Gbps
+-------------------------
+
+
+//////////////////////////////////////////////////WIthout any prints
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1223 seconds
+Throughput:      66.9972 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.0810 seconds
+Throughput:      101.1682 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1275 seconds
+Throughput:      64.2553 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.0945 seconds
+Throughput:      86.6499 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 976.56 MB
+Elapsed time:    0.1202 seconds
+Throughput:      68.1412 Gbps
+-------------------------
+
+
+To do today:
+align memory
+and 
+allocate only once buffers 
+
+
+
+
+
+
+
+
+
