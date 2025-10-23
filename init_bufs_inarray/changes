@@ -6,6 +6,13 @@ struct rdma_resources {
 };
 
 get bufs from inventory in initialization function and lookthem up later through the array
-
+Create big array to fit all buffers. I had an issue that if i didnt decrease the ref count of the buffers i couldnt reuse them so i would have to get again a new buf each 
+time and nothing would change. So now i have an array of 1000 buffers. Not oprimal but for now it will suffice
 Performance:
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    5.5656 seconds
+Throughput:      91.9940 Gbps
+-------------------------
+Steady performance. 4 tests all around the same time standard deviation around 0.1Gb/s
 
