@@ -14,3 +14,10 @@ result = doca_mmap_get_memrange(resources->remote_mmap,
 if (result != DOCA_SUCCESS) {
     // Handle error
 }
+///////////////////////////////
+Also made possible rewriting over and over again the memory so we test with more data and the test is more reliable
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    5.9053 seconds
+Throughput:      86.7012 Gbps
+-------------------------
