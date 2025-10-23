@@ -82,7 +82,10 @@ Questions:
 -> What happens with keys. I remember you told me about keys but i just use offset. How to structure my app to use keys and to be more correct.
 
 
-
+///////////////////////////////////////////////////////////////////////////////////////////////////
+Max rdma message size: 2GB
+Memory registration limit:
+  
 
 
 
