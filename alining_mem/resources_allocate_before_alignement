@@ -1,0 +1,35 @@
+doca_error_t allocate_rdma_resources(struct rdma_config *cfg,
+                                     const uint32_t mmap_permissions,
+                                     const uint32_t rdma_permissions,
+                                     task_check func,
+                                     struct rdma_resources *resources)
+{
+        doca_error_t result, tmp_result;
+
+        resources->cfg = cfg;
+        resources->first_encountered_error = DOCA_SUCCESS;
+        resources->run_pe_progress = true;
+        resources->num_remaining_tasks = 0;
+
+...
+
+        /* Allocate memory for memory range */
+        resources->mmap_memrange = calloc(MEM_RANGE_LEN, sizeof(*resources->mmap_memrange));
+        if (resources->mmap_memrange == NULL) {
+                DOCA_LOG_ERR("Failed to allocate memory for mmap_memrange: %s", doca_error_get_descr(result));
+                result = DOCA_ERROR_NO_MEMORY;
+                goto close_doca_dev;
+        }
+
+        /* Create mmap with allocated memory */
+        result = create_local_mmap(&(resources->mmap),
+                                   mmap_permissions,
+                                   (void *)resources->mmap_memrange,
+                                   MEM_RANGE_LEN,
+                                   resources->doca_device);
+        if (result != DOCA_SUCCESS) {
+                DOCA_LOG_ERR("Failed to create DOCA mmap: %s", doca_error_get_descr(result));
+                goto free_memrange;
+    }
+
+...
