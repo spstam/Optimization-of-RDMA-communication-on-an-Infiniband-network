@@ -1,0 +1,9 @@
+offset is now calculated like this:
+
+
+offset +=MAX_BUFF_SIZE;
+if (offset >= 1024000000){
+			offset=0;
+}
+
+could use also mod for faster calc
