@@ -8,3 +8,151 @@ Throughput:      93.2784 Gbps
 91Gb/s - 95Gb/s
 
 also tried many other sizes of messages seems that 64 is the best
+/////////////////////////////////////////////////////////////////////
+PIPELINE LENGTHS
+The message is too big so if fills the pipe and the pipe len doesnt matter 
+
+1:
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4455 seconds
+Throughput:      115.1726 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4538 seconds
+Throughput:      114.9568 Gbps
+-------------------------
+
+
+
+8: 
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.3972 seconds
+Throughput:      116.4368 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4229 seconds
+Throughput:      115.7616 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4293 seconds
+Throughput:      115.5942 Gbps
+-------------------------
+
+
+
+
+16: 
+  --- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4177 seconds
+Throughput:      115.8969 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4219 seconds
+Throughput:      115.7866 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.3780 seconds
+Throughput:      116.9495 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4687 seconds
+Throughput:      114.5739 Gbps
+-------------------------
+
+
+  
+32: 
+  
+  --- BENCHMARK RESULTS ---
+  Total data sent: 61035.16 MB
+  Elapsed time:    4.3980 seconds
+  Throughput:      116.4177 Gbps
+  -------------------------
+  
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4711 seconds
+Throughput:      114.5144 Gbps
+-------------------------
+
+  --- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4554 seconds
+Throughput:      114.9162 Gbps
+-------------------------
+
+
+64: 
+
+  --- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.5005 seconds
+Throughput:      113.7660 Gbps
+-------------------------
+   --- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4797 seconds
+Throughput:      114.2935 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4667 seconds
+Throughput:      114.6269 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.3853 seconds
+Throughput:      116.7524 Gbps
+-------------------------
+
+
+128: 
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.3941 seconds
+Throughput:      116.5212 Gbps
+-------------------------
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.3806 seconds
+Throughput:      116.8802 Gbps
+-------------------------
+
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    4.4035 seconds
+Throughput:      116.2722 Gbps
+-------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
