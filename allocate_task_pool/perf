@@ -6,3 +6,5 @@ Throughput:      93.2784 Gbps
 -------------------------
 
 91Gb/s - 95Gb/s
+
+also tried many other sizes of messages seems that 64 is the best
