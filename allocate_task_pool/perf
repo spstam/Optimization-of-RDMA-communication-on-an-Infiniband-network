@@ -1,0 +1,8 @@
+1000messages 64M average:
+--- BENCHMARK RESULTS ---
+Total data sent: 61035.16 MB
+Elapsed time:    5.3737 seconds
+Throughput:      93.2784 Gbps
+-------------------------
+
+91Gb/s - 95Gb/s
