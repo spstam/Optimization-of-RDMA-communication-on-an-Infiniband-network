@@ -1,0 +1,5 @@
+struct rdma_resources {
+    // ... existing members
+    char *remote_mmap_range;
+    size_t remote_mmap_range_len;
+};
