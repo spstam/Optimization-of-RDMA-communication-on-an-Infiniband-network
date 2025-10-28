@@ -1,0 +1,6 @@
+struct rdma_resources {
+    // ... existing members
+    struct doca_buf *local_bufs[NUM_TRANSFERS];
+    struct doca_buf *remote_bufs[NUM_TRANSFERS];
+    int curr_buf_idx;
+};
