@@ -1,0 +1,744 @@
+/*
+ * Copyright (c) 2023 NVIDIA CORPORATION AND AFFILIATES.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted
+ * provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright notice, this list of
+ *       conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice, this list of
+ *       conditions and the following disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the NVIDIA CORPORATION nor the names of its contributors may be used
+ *       to endorse or promote products derived from this software without specific prior written
+ *       permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NVIDIA CORPORATION BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TOR (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+#include <doca_error.h>
+#include <doca_log.h>
+#include <doca_buf_inventory.h>
+#include <doca_buf.h>
+#include <doca_ctx.h>
+
+#include "rdma_common.h"
+
+DOCA_LOG_REGISTER(RDMA_WRITE_REQUESTER::SAMPLE);
+#define MAX_BUFF_SIZE 64000000
+#define NUM_TRANSFERS 1000
+#define PHYSICAL_BUFFER_SIZE 1024LL * 1024 * 1024
+#define NUM_CHUNKS_IN_BUFFER (PHYSICAL_BUFFER_SIZE / MAX_BUFF_SIZE)
+#define PIPELINE_DEPTH 8
+#define SIG_SIZE 8
+#define DATA_OFFSET 0
+#define SIGNAL_OFFSET 1024000008
+static doca_error_t rdma_write_prepare_and_submit_task(struct rdma_resources *resources);
+/*
+ * Write the connection details for the responder to read,
+ * and read the connection details and the remote mmap string of the responder
+ * In DC transport mode it is only needed to read the remote connection details
+ *
+ * @cfg [in]: Configuration parameters
+ * @resources [in/out]: RDMA resources
+ * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
+ */
+
+
+static int counter=0;
+static doca_error_t cm_requester_setup_and_submit(struct rdma_resources *resources)
+{
+    doca_error_t result,tmp_result;
+	// doca_error_t *first_encountered_error = (doca_error_t *)task_user_data.ptr;
+
+    result = doca_mmap_create_from_export(NULL,
+							resources->remote_mmap_descriptor,
+							resources->remote_mmap_descriptor_size,
+							resources->doca_device,
+							&(resources->remote_mmap));
+
+    if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to create mmap from export: %s", doca_error_get_descr(result));
+		// DOCA_ERROR_PROPAGATE(*first_encountered_error, result);
+
+		return result;
+	}
+
+	result = doca_mmap_get_memrange(resources->remote_mmap, (void **)&resources->remote_mmap_range, &resources->remote_mmap_range_len);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to get DOCA memory map range: %s", doca_error_get_descr(result));
+		// DOCA_ERROR_PROPAGATE(*first_encountered_error, result);
+
+		return result;
+	}
+	DOCA_LOG_INFO("Remote MMAP created. Range Addr: %p, Range Length: %zu", (void *)resources->remote_mmap_range, resources->remote_mmap_range_len);
+	/////////for debug
+	if (resources->remote_mmap_range_len < (NUM_CHUNKS_IN_BUFFER * MAX_BUFF_SIZE)) {
+		DOCA_LOG_ERR("Remote MMAP length (%zu) is smaller than expected physical buffer size (%lld)!",
+					 resources->remote_mmap_range_len, (long long int)(NUM_CHUNKS_IN_BUFFER * MAX_BUFF_SIZE));
+	}
+	//////////////////
+	for (int i = 0; i < PIPELINE_DEPTH; i++) {
+    result = doca_rdma_task_write_allocate_init(resources->rdma,
+                                                resources->connections[0],
+                                                NULL, // Buffer will be set later
+                                                NULL, // Buffer will be set later
+                                                (union doca_data){.ptr = &resources->first_encountered_error},
+                                                &resources->write_tasks[i]);
+    if (result != DOCA_SUCCESS) { 
+		DOCA_LOG_ERR("Failed to allocate RDMA write task: %s", doca_error_get_descr(result));
+		return result;
+	 }
+	}
+
+
+
+
+	//initialise buffers, may need to put them in different loops if the receiver side had a different memory format than sender side
+	long long int offset = 0;
+	for(int i=0; i<NUM_TRANSFERS;i++){
+		/* Add src buffer to DOCA buffer inventory from the remote mmap */
+		tmp_result = doca_buf_inventory_buf_get_by_data(resources->buf_inventory,
+								resources->mmap,
+								resources->mmap_memrange + offset,
+								MAX_BUFF_SIZE,
+								&resources->local_bufs[i]);
+		if (tmp_result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("Failed to allocate DOCA buffer to DOCA buffer inventory: %s",
+					 doca_error_get_descr(tmp_result));
+			// DOCA_ERROR_PROPAGATE(*first_encountered_error, tmp_result);
+			return tmp_result;
+		}
+		
+		tmp_result = doca_buf_inventory_buf_get_by_addr(resources->buf_inventory,
+								resources->remote_mmap,
+								resources->remote_mmap_range + offset,
+								MAX_BUFF_SIZE,
+								&resources->remote_bufs[i]);
+		if (tmp_result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("Failed to allocate DOCA buffer to DOCA buffer inventory: %s",
+					 doca_error_get_descr(tmp_result));
+			// DOCA_ERROR_PROPAGATE(*first_encountered_error, tmp_result);
+			return tmp_result;
+		}
+		/////////////////debug
+		if (tmp_result == DOCA_SUCCESS) {
+			size_t buf_len;
+			void *buf_data;
+			doca_buf_get_len(resources->remote_bufs[i], &buf_len);
+			doca_buf_get_data(resources->remote_bufs[i], &buf_data);
+			DOCA_LOG_INFO("Remote buf %d created. Addr: %p, Len: %zu",
+						 i, buf_data, buf_len);
+		}
+		//////////////////////
+		//doca_buf_inventory_buf_get_by_addr
+		//needs the length later
+		// tmp_result = doca_buf_set_data(resources->remote_bufs[i],
+        //                        resources->remote_mmap_range + offset,
+        //                        MAX_BUFF_SIZE);
+		// if (tmp_result != DOCA_SUCCESS) {
+		// 	DOCA_LOG_ERR("Failed to set data for remote buffer: %s", doca_error_get_descr(tmp_result));
+		// 	return tmp_result;
+		// }
+
+		offset = (offset + MAX_BUFF_SIZE)%PHYSICAL_BUFFER_SIZE;
+	}
+	resources->cur_buf_idx=0;
+
+	//set memory
+	for (int j=0;j<NUM_CHUNKS_IN_BUFFER;j++){
+		memset(resources->mmap_memrange + MAX_BUFF_SIZE * j, 'A' + j, MAX_BUFF_SIZE);
+	}
+	DOCA_LOG_INFO("\nStarting benchmark: %d transfers\n", NUM_TRANSFERS);
+    clock_gettime(CLOCK_MONOTONIC, &resources->start_time);
+
+    resources->transfers_left = NUM_TRANSFERS; 
+
+    for (int i = 0; i < PIPELINE_DEPTH; i++) {
+        if (resources->transfers_left == 0) break;
+
+        result = rdma_write_prepare_and_submit_task(resources);
+        if (result != DOCA_SUCCESS) break; 
+
+        resources->transfers_left--; 
+    }
+    return result;
+}
+
+
+
+static doca_error_t write_read_connection(struct rdma_config *cfg, struct rdma_resources *resources)
+{
+	doca_error_t result = DOCA_SUCCESS;
+
+	if (cfg->transport_type == DOCA_RDMA_TRANSPORT_TYPE_RC) {
+		/* Write the RDMA connection details */
+		result = write_file(cfg->local_connection_desc_path,
+				    (char *)resources->rdma_conn_descriptor,
+				    resources->rdma_conn_descriptor_size);
+		if (result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("Failed to write the RDMA connection details: %s", doca_error_get_descr(result));
+			return result;
+		}
+
+		DOCA_LOG_INFO("You can now copy %s to the responder", cfg->local_connection_desc_path);
+	}
+
+	DOCA_LOG_INFO(
+		"Please copy %s and %s from the responder and then press enter after pressing enter in the responder side",
+		cfg->remote_connection_desc_path,
+		cfg->remote_resource_desc_path);
+
+	/* Wait for enter */
+	wait_for_enter();
+
+	/* Read the remote RDMA connection details */
+	result = read_file(cfg->remote_connection_desc_path,
+			   (char **)&resources->remote_rdma_conn_descriptor,
+			   &resources->remote_rdma_conn_descriptor_size);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to read the remote RDMA connection details: %s", doca_error_get_descr(result));
+		return result;
+	}
+
+	/* Read the remote mmap connection details */
+	result = read_file(cfg->remote_resource_desc_path,
+			   (char **)&resources->remote_mmap_descriptor,
+			   &resources->remote_mmap_descriptor_size);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to read the remote RDMA mmap connection details: %s",
+			     doca_error_get_descr(result));
+		return result;
+	}
+
+	return result;
+}
+
+/*
+ * RDMA write task completed callback
+ *
+ * @rdma_write_task [in]: Completed task
+ * @task_user_data [in]: doca_data from the task
+ * @ctx_user_data [in]: doca_data from the context
+ */
+static void rdma_write_completed_callback(struct doca_rdma_task_write *rdma_write_task,
+					  union doca_data task_user_data,
+					  union doca_data ctx_user_data)
+{
+	struct rdma_resources *resources = (struct rdma_resources *)ctx_user_data.ptr;
+	// doca_error_t *first_encountered_error = (doca_error_t *)task_user_data.ptr;
+	doca_error_t result = DOCA_SUCCESS;//, tmp_result;
+
+	// const struct doca_buf *src_buf;
+	// struct doca_buf *dst_buf;
+	counter++;
+	// DOCA_LOG_INFO("RDMA write task was done Successfully counter = %d", counter);
+	// DOCA_LOG_INFO("Written to responder \"%s\"", resources->cfg->write_string);
+
+	// Get the source and destination buffers specific to THIS completed task
+	// src_buf = doca_rdma_task_write_get_src_buf(rdma_write_task);
+	// dst_buf = doca_rdma_task_write_get_dst_buf(rdma_write_task);
+
+	// doca_task_free(doca_rdma_task_write_as_task(rdma_write_task));
+	// tmp_result = doca_buf_dec_refcount(dst_buf, NULL);
+	// if (tmp_result != DOCA_SUCCESS) {
+	// 	DOCA_LOG_ERR("Failed to decrease dst_buf count: %s", doca_error_get_descr(tmp_result));
+	// 	DOCA_ERROR_PROPAGATE(result, tmp_result);
+	// }
+	// tmp_result = doca_buf_dec_refcount((struct doca_buf *)src_buf, NULL);
+	// if (tmp_result != DOCA_SUCCESS) {
+	// 	DOCA_LOG_ERR("Failed to decrease src_buf count: %s", doca_error_get_descr(tmp_result));
+	// 	DOCA_ERROR_PROPAGATE(result, tmp_result);
+	// }
+
+	/* Update that an error was encountered, if any */
+	// DOCA_ERROR_PROPAGATE(*first_encountered_error, tmp_result);
+
+	// resources->transfers_left--;
+    
+    
+	resources->num_remaining_tasks--;
+    
+    if (resources->transfers_left > 0){
+		result = rdma_write_prepare_and_submit_task(resources);
+		if (result != DOCA_SUCCESS){
+			DOCA_LOG_ERR("rdma_send_prepare_and_submit_task() failed: %s", doca_error_get_descr(result));	
+			(void)doca_ctx_stop(resources->rdma_ctx);
+			return;
+        }
+		resources->transfers_left--;
+    }else if(resources->num_remaining_tasks==0){
+        //print benchmark results
+        clock_gettime(CLOCK_MONOTONIC, &resources->end_time);
+        double total_bytes = (double)NUM_TRANSFERS * MAX_BUFF_SIZE;
+        double elapsed_seconds = (resources->end_time.tv_sec - resources->start_time.tv_sec) +
+        (resources->end_time.tv_nsec - resources->start_time.tv_nsec) / 1e9;
+        double gbps = (total_bytes * 8) / (elapsed_seconds * 1e9);
+        
+        printf("\n--- BENCHMARK RESULTS ---\n");
+        printf("Total data sent: %.2f MB\n", total_bytes / (1024*1024));
+        printf("Elapsed time:    %.4f seconds\n", elapsed_seconds);
+        printf("Throughput:      %.4f Gbps\n", gbps);
+        printf("-------------------------\n\n");
+        
+		DOCA_LOG_INFO("All write tasks completed. Sending final signal to responder.");
+		struct doca_rdma_task_send *send_task;
+		struct doca_buf *signal_buf;
+		void *buf_data;
+		const char *signal_msg = "done";
+		// 1. Get a buffer from the inventory for the signal
+		result = doca_buf_inventory_buf_get_by_data(resources->buf_inventory, resources->mmap,
+													resources->mmap_memrange+SIGNAL_OFFSET, strlen(signal_msg) + 1,
+													&signal_buf);
+		if (result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("Failed to get buffer for signal task: %s", doca_error_get_descr(result));
+			(void)doca_ctx_stop(resources->rdma_ctx);
+			return;
+		}
+		doca_buf_get_data(signal_buf, &buf_data);
+        strcpy(buf_data, signal_msg);	
+		result = doca_rdma_task_send_allocate_init(resources->rdma, resources->connections[0],
+												signal_buf, // Pass the doca_buf* here
+												(union doca_data){0}, &send_task);
+		if (result == DOCA_SUCCESS) {
+			doca_task_submit(doca_rdma_task_send_as_task(send_task));
+		} else {
+			DOCA_LOG_ERR("Failed to allocate signal task: %s", doca_error_get_descr(result));
+			doca_buf_dec_refcount(signal_buf, NULL); // Clean up the buffer if task allocation fails
+		}
+    }
+	/* Stop context once all tasks are completed */
+	// if (resources->num_remaining_tasks == 0) {
+	// 	if (resources->cfg->use_rdma_cm == true)
+	// 		(void)rdma_cm_disconnect(resources);
+		// (void)doca_ctx_stop(resources->rdma_ctx);
+	// }
+}
+
+/*
+ * RDMA write task error callback
+ *
+ * @rdma_write_task [in]: failed task
+ * @task_user_data [in]: doca_data from the task
+ * @ctx_user_data [in]: doca_data from the context
+ */
+static void rdma_write_error_callback(struct doca_rdma_task_write *rdma_write_task,
+				      union doca_data task_user_data,
+				      union doca_data ctx_user_data)
+{
+	struct rdma_resources *resources = (struct rdma_resources *)ctx_user_data.ptr;
+	struct doca_task *task = doca_rdma_task_write_as_task(rdma_write_task);
+	doca_error_t *first_encountered_error = (doca_error_t *)task_user_data.ptr;
+	doca_error_t result;
+
+	/* Update that an error was encountered */
+	result = doca_task_get_status(task);
+	DOCA_ERROR_PROPAGATE(*first_encountered_error, result);
+	DOCA_LOG_ERR("RDMA write task failed: %s", doca_error_get_descr(result));
+
+	// result = doca_buf_dec_refcount(resources->dst_buf, NULL);
+	// if (result != DOCA_SUCCESS)
+	// 	DOCA_LOG_ERR("Failed to decrease dst_buf count: %s", doca_error_get_descr(result));
+	// result = doca_buf_dec_refcount(resources->src_buf, NULL);
+	// if (result != DOCA_SUCCESS)
+	// 	DOCA_LOG_ERR("Failed to decrease src_buf count: %s", doca_error_get_descr(result));
+	// doca_task_free(task);
+	// resources->transfers_left++;
+	resources->num_remaining_tasks--;
+	/* Stop context once all tasks are completed */
+	if (resources->num_remaining_tasks == 0) {
+		if (resources->cfg->use_rdma_cm == true)
+			(void)rdma_cm_disconnect(resources);
+		(void)doca_ctx_stop(resources->rdma_ctx);
+	}
+}
+
+static void rdma_send_error_callback(struct doca_rdma_task_send *rdma_send_task,
+				     union doca_data task_user_data,
+				     union doca_data ctx_user_data)
+{
+	struct rdma_resources *resources = (struct rdma_resources *)ctx_user_data.ptr;
+	struct doca_task *task = doca_rdma_task_send_as_task(rdma_send_task);
+	doca_error_t *first_encountered_error = (doca_error_t *)task_user_data.ptr;
+	doca_error_t result;
+
+	/* Update that an error was encountered */
+	result = doca_task_get_status(task);
+	DOCA_ERROR_PROPAGATE(*first_encountered_error, result);
+	DOCA_LOG_ERR("RDMA send task failed: %s", doca_error_get_descr(result));
+
+	// doca_task_free(task);
+	const struct doca_buf *src_buf = doca_rdma_task_send_get_src_buf(rdma_send_task);
+    doca_task_free(task);
+    result = doca_buf_dec_refcount((struct doca_buf *)src_buf, NULL);
+    if (result != DOCA_SUCCESS)
+        {DOCA_LOG_ERR("Failed to decrease src_buf count: %s", doca_error_get_descr(result));}
+	resources->num_remaining_tasks--;
+	/* Stop context once all tasks are completed */
+	if (resources->num_remaining_tasks == 0) {
+		if (resources->cfg->use_rdma_cm == true)
+			(void)rdma_cm_disconnect(resources);
+		(void)doca_ctx_stop(resources->rdma_ctx);
+	}
+}
+
+static void final_signal_sent_callback(struct doca_rdma_task_send *task,
+                                       union doca_data task_user_data,
+                                       union doca_data ctx_user_data)
+{
+	doca_error_t result = DOCA_SUCCESS;
+	struct rdma_resources *resources = (struct rdma_resources *)ctx_user_data.ptr;
+	const struct doca_buf *signal_buf;
+
+
+    DOCA_LOG_INFO("Final signal sent successfully.");
+	signal_buf = doca_rdma_task_send_get_src_buf(task);
+    doca_task_free(doca_rdma_task_send_as_task(task));
+	result = doca_buf_dec_refcount((struct doca_buf *)signal_buf, NULL);
+	if (result != DOCA_SUCCESS) {
+        DOCA_LOG_ERR("Failed to decrease src_buf count: %s", doca_error_get_descr(result));
+	}
+	if (resources->cfg->use_rdma_cm == true){
+				(void)rdma_cm_disconnect(resources);
+            }
+	(void)doca_ctx_stop(resources->rdma_ctx);
+    // The context will be stopped by the write callback when all writes are done.
+}
+
+/*
+ * Export and receive connection details, and connect to the remote RDMA
+ *
+ * @resources [in]: RDMA resources
+ * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
+ */
+static doca_error_t rdma_write_requester_export_and_connect(struct rdma_resources *resources)
+{
+	doca_error_t result;
+
+	if (resources->cfg->use_rdma_cm == true)
+		return rdma_cm_connect(resources);
+
+	/* Export RDMA connection details */
+	result = doca_rdma_export(resources->rdma,
+				  &(resources->rdma_conn_descriptor),
+				  &(resources->rdma_conn_descriptor_size),
+				  &(resources->connections[0]));
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to export RDMA: %s", doca_error_get_descr(result));
+		return result;
+	}
+
+	/* write and read connection details to the responder */
+	result = write_read_connection(resources->cfg, resources);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to write and read connection details from responder: %s",
+			     doca_error_get_descr(result));
+		return result;
+	}
+
+	/* Connect RDMA */
+	result = doca_rdma_connect(resources->rdma,
+				   resources->remote_rdma_conn_descriptor,
+				   resources->remote_rdma_conn_descriptor_size,
+				   resources->connections[0]);
+	if (result != DOCA_SUCCESS)
+		DOCA_LOG_ERR("Failed to connect the requester's RDMA to the responder's RDMA: %s",
+			     doca_error_get_descr(result));
+
+	return result;
+}
+
+/*
+ * Prepare and submit RDMA write task
+ *
+ * @resources [in]: RDMA resources
+ * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
+ */
+static doca_error_t rdma_write_prepare_and_submit_task(struct rdma_resources *resources)
+{
+	// struct doca_rdma_task_write *rdma_write_task = NULL;
+	// union doca_data task_user_data = {0};
+	doca_error_t result;//, tmp_result;
+
+	int data_idx = (NUM_TRANSFERS - resources->transfers_left);
+	// resources->cur_buf_idx = data_idx;//%NUM_CHUNKS_IN_BUFFER;
+	// resources->src_buf = resources->local_bufs[data_idx];
+	// resources->dst_buf = resources->remote_bufs[data_idx];
+	struct doca_buf *current_src_buf = resources->local_bufs[data_idx];
+    struct doca_buf *current_dst_buf = resources->remote_bufs[data_idx];
+	/* Include first_encountered_error in user data of task to be used in the callbacks */
+	// task_user_data.ptr = &(resources->first_encountered_error);
+	// /* Allocate and construct RDMA write task */
+	// result = doca_rdma_task_write_allocate_init(resources->rdma,
+	// 					    resources->connections[0],
+	// 					    resources->src_buf,
+	// 					    resources->dst_buf,
+	// 					    task_user_data,
+	// 					    &rdma_write_task);
+	// if (result != DOCA_SUCCESS) {
+		// 	DOCA_LOG_ERR("Failed to allocate RDMA write task: %s", doca_error_get_descr(result));
+		// 	goto free_task;
+		// }
+	int task_idx = data_idx % PIPELINE_DEPTH;
+	struct doca_rdma_task_write *task = resources->write_tasks[task_idx];
+	doca_rdma_task_write_set_src_buf(task, current_src_buf);
+	doca_rdma_task_write_set_dst_buf(task, current_dst_buf);
+		
+	/* Submit RDMA write task */
+	// DOCA_LOG_INFO("Submitting RDMA write task that writes SSS... to the responder");
+	resources->num_remaining_tasks++;
+	result = doca_task_submit(doca_rdma_task_write_as_task(task));
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to submit RDMA write task: %s", doca_error_get_descr(result));
+		resources->num_remaining_tasks--;
+
+	}
+
+	return result;
+
+// free_task:
+// 	doca_task_free(doca_rdma_task_write_as_task(rdma_write_task));
+// 	return result;
+}
+
+/*
+ * RDMA write requester state change callback
+ * This function represents the state machine for this RDMA program
+ *
+ * @user_data [in]: doca_data from the context
+ * @ctx [in]: DOCA context
+ * @prev_state [in]: Previous DOCA context state
+ * @next_state [in]: Next DOCA context state
+ */
+static void rdma_write_requester_state_change_callback(const union doca_data user_data,
+						       struct doca_ctx *ctx,
+						       enum doca_ctx_states prev_state,
+						       enum doca_ctx_states next_state)
+{
+	struct rdma_resources *resources = (struct rdma_resources *)user_data.ptr;
+	struct rdma_config *cfg = resources->cfg;
+	doca_error_t result = DOCA_SUCCESS;
+	doca_error_t tmp_result = DOCA_SUCCESS;
+
+	(void)prev_state;
+	(void)ctx;
+
+	switch (next_state) {
+	case DOCA_CTX_STATE_STARTING:
+		DOCA_LOG_INFO("RDMA context entered starting state");
+		break;
+	case DOCA_CTX_STATE_RUNNING:
+		DOCA_LOG_INFO("RDMA context is running");
+
+		result = rdma_write_requester_export_and_connect(resources);
+		if (result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("rdma_write_requester_export_and_connect() failed: %s",
+				     doca_error_get_descr(result));
+			break;
+		} else
+			DOCA_LOG_INFO("RDMA context finished initialization");
+			
+			// result = doca_mmap_create_from_export(NULL,
+			// 	resources->remote_mmap_descriptor,
+			// 	resources->remote_mmap_descriptor_size,
+			// 	resources->doca_device,
+			// 	&(resources->remote_mmap));
+			// 	if (result != DOCA_SUCCESS) {
+			// 		DOCA_LOG_ERR("Failed to create mmap from export: %s", doca_error_get_descr(result));
+			// 		(void)doca_ctx_stop(ctx);
+			// 		return;
+			// 	}
+		if (cfg->use_rdma_cm == true)
+			break;
+		
+		result = rdma_write_prepare_and_submit_task(resources);
+		if (result != DOCA_SUCCESS){
+			DOCA_LOG_ERR("rdma_write_prepare_and_submit_task() failed: %s", doca_error_get_descr(result));
+			break;
+		}
+		
+		break;
+	case DOCA_CTX_STATE_STOPPING:
+		/**
+		 * doca_ctx_stop() has been called.
+		 * In this sample, this happens either due to a failure encountered, in which case doca_pe_progress()
+		 * will cause any inflight task to be flushed, or due to the successful compilation of the sample flow.
+		 * In both cases, in this sample, doca_pe_progress() will eventually transition the context to idle
+		 * state.
+		 */
+		long long int offset = 0;
+	    for(int i=0; i<NUM_TRANSFERS;i++){
+			tmp_result = doca_buf_dec_refcount(resources->local_bufs[i], NULL);
+			if (tmp_result != DOCA_SUCCESS) {
+				DOCA_LOG_ERR("Failed to decrease src_buf count: %s", doca_error_get_descr(tmp_result));
+				DOCA_ERROR_PROPAGATE(result, tmp_result);
+			}
+
+			tmp_result = doca_buf_dec_refcount(resources->remote_bufs[i], NULL);
+			if (tmp_result != DOCA_SUCCESS) {
+				DOCA_LOG_ERR("Failed to decrease dst_buf count: %s", doca_error_get_descr(tmp_result));
+				DOCA_ERROR_PROPAGATE(result, tmp_result);
+			}
+			offset+=MAX_BUFF_SIZE;
+		}
+		for (int i = 0; i < PIPELINE_DEPTH; i++) {
+			if (resources->write_tasks[i] != NULL) {
+				doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+			}
+		}
+		DOCA_LOG_INFO("RDMA context entered into stopping state. Any inflight tasks will be flushed sent_tasks = /%d/\n",counter);
+		break;
+	case DOCA_CTX_STATE_IDLE:
+		DOCA_LOG_INFO("RDMA context has been stopped");
+
+		/* We can stop progressing the PE */
+		resources->run_pe_progress = false;
+		break;
+	default:
+		break;
+	}
+
+	/* If something failed - update that an error was encountered and stop the ctx */
+	if (result != DOCA_SUCCESS) {
+		DOCA_ERROR_PROPAGATE(resources->first_encountered_error, result);
+		(void)doca_ctx_stop(ctx);
+	}
+}
+
+/*
+ * Requester side of the RDMA write
+ *
+ * @cfg [in]: Configuration parameters
+ * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
+ */
+doca_error_t rdma_write_requester(struct rdma_config *cfg)
+{
+	struct rdma_resources resources = {0};
+	union doca_data ctx_user_data = {0};
+	const uint32_t mmap_permissions = DOCA_ACCESS_FLAG_LOCAL_READ_WRITE;
+	const uint32_t rdma_permissions = DOCA_ACCESS_FLAG_LOCAL_READ_WRITE;
+	struct timespec ts = {
+		.tv_sec = 0,
+		.tv_nsec = SLEEP_IN_NANOS,
+	};
+	doca_error_t result, tmp_result;
+
+	/* Allocating resources */
+	result = allocate_rdma_resources(cfg,
+					 mmap_permissions,
+					 rdma_permissions,
+					 doca_rdma_cap_task_write_is_supported,
+					 &resources);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to allocate RDMA Resources: %s", doca_error_get_descr(result));
+		return result;
+	}
+
+	result = doca_rdma_task_write_set_conf(resources.rdma,
+					       rdma_write_completed_callback,
+					       rdma_write_error_callback,
+					       PIPELINE_DEPTH);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Unable to set configurations for RDMA write task: %s", doca_error_get_descr(result));
+		goto destroy_resources;
+	}
+
+
+	result = doca_rdma_task_send_set_conf(resources.rdma,
+                                      final_signal_sent_callback,
+                                      rdma_send_error_callback,
+                                      1);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Unable to set configurations for RDMA send task: %s", doca_error_get_descr(result));
+		goto destroy_resources;
+	}
+
+	result = doca_ctx_set_state_changed_cb(resources.rdma_ctx, rdma_write_requester_state_change_callback);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Unable to set state change callback for RDMA context: %s", doca_error_get_descr(result));
+		goto destroy_resources;
+	}
+
+	/* Create DOCA buffer inventory */
+	result = doca_buf_inventory_create(2*NUM_TRANSFERS+1, &resources.buf_inventory);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to create DOCA buffer inventory: %s", doca_error_get_descr(result));
+		goto destroy_resources;
+	}
+
+	/* Start DOCA buffer inventory */
+	result = doca_buf_inventory_start(resources.buf_inventory);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to start DOCA buffer inventory: %s", doca_error_get_descr(result));
+		goto destroy_buf_inventory;
+	}
+
+	if (cfg->use_rdma_cm == true) {
+		resources.is_requester = true;
+		resources.require_remote_mmap = true;
+		resources.task_fn = cm_requester_setup_and_submit;
+		result = config_rdma_cm_callback_and_negotiation_task(&resources,
+								      /* need_send_mmap_info */ false,
+								      /* need_recv_mmap_info */ true);
+		if (result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("Failed to config RDMA CM callbacks and negotiation functions: %s",
+				     doca_error_get_descr(result));
+			goto destroy_buf_inventory;
+		}
+	}
+
+	/* Include the program's resources in user data of context to be used in callbacks */
+	ctx_user_data.ptr = &(resources);
+	result = doca_ctx_set_user_data(resources.rdma_ctx, ctx_user_data);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to set context user data: %s", doca_error_get_descr(result));
+		goto destroy_resources;
+	}
+
+	/* Start RDMA context */
+	result = doca_ctx_start(resources.rdma_ctx);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to start RDMA context: %s", doca_error_get_descr(result));
+		goto stop_buf_inventory;
+	}
+
+	/*
+	 * Run the progress engine which will run the state machine defined in
+	 * rdma_write_requester_state_change_callback() When the context moves to idle, the context change callback call
+	 * will signal to stop running the progress engine.
+	 */
+	while (resources.run_pe_progress) {
+		if (doca_pe_progress(resources.pe) == 0)
+			nanosleep(&ts, &ts);
+	}
+
+	/* Assign the result we update in the callbacks */
+	result = resources.first_encountered_error;
+
+stop_buf_inventory:
+	tmp_result = doca_buf_inventory_stop(resources.buf_inventory);
+	if (tmp_result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to stop DOCA buffer inventory: %s", doca_error_get_descr(tmp_result));
+		DOCA_ERROR_PROPAGATE(result, tmp_result);
+	}
+destroy_buf_inventory:
+	tmp_result = doca_buf_inventory_destroy(resources.buf_inventory);
+	if (tmp_result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to destroy DOCA buffer inventory: %s", doca_error_get_descr(tmp_result));
+		DOCA_ERROR_PROPAGATE(result, tmp_result);
+	}
+destroy_resources:
+	tmp_result = destroy_rdma_resources(&resources, cfg);
+	if (tmp_result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to destroy DOCA RDMA resources: %s", doca_error_get_descr(tmp_result));
+		DOCA_ERROR_PROPAGATE(result, tmp_result);
+	}
+	return result;
+}
