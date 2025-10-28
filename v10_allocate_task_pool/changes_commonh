@@ -1,0 +1,4 @@
+struct rdma_resources {
+    // ... existing members
+    struct doca_rdma_task_write *write_tasks[PIPELINE_DEPTH]; // The task pool
+};
