@@ -32,7 +32,7 @@
 #include "rdma_common.h"
 
 DOCA_LOG_REGISTER(RDMA_WRITE_REQUESTER::SAMPLE);
-#define MAX_BUFF_SIZE 65536
+#define MAX_BUFF_SIZE 64000000
 
 #define NUM_TRANSFERS 1000
 #define PHYSICAL_BUFFER_SIZE 1024LL * 1024 * 1024
@@ -145,6 +145,7 @@ static doca_error_t cm_requester_setup_and_submit(struct rdma_resources *resourc
 		snprintf(resources->mmap_memrange + MAX_BUFF_SIZE * j, MAX_BUFF_SIZE, "%d", j);
 		// memset(resources->mmap_memrange + MAX_BUFF_SIZE * j, str , MAX_BUFF_SIZE);
 	}
+	
 	DOCA_LOG_INFO("\nStarting benchmark: %d transfers\n", NUM_TRANSFERS);
     clock_gettime(CLOCK_MONOTONIC, &resources->start_time);
 
@@ -261,7 +262,12 @@ static void rdma_write_completed_callback(struct doca_rdma_task_write *rdma_writ
 		// printf("Submited");
 		result = rdma_write_prepare_and_submit_task(resources);
 		if (result != DOCA_SUCCESS){
-			DOCA_LOG_ERR("rdma_send_prepare_and_submit_task() failed: %s", doca_error_get_descr(result));	
+			DOCA_LOG_ERR("rdma_send_prepare_and_submit_task() failed: %s", doca_error_get_descr(result));
+			for (int i = 0; i < PIPELINE_DEPTH; i++) {
+				if (resources->write_tasks[i] != NULL) {
+					doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+				}
+			}
 			(void)doca_ctx_stop(resources->rdma_ctx);
 			return;
         }
@@ -291,6 +297,11 @@ static void rdma_write_completed_callback(struct doca_rdma_task_write *rdma_writ
 													&signal_buf);
 		if (result != DOCA_SUCCESS) {
 			DOCA_LOG_ERR("Failed to get buffer for signal task: %s", doca_error_get_descr(result));
+			for (int i = 0; i < PIPELINE_DEPTH; i++) {
+				if (resources->write_tasks[i] != NULL) {
+					doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+				}
+			}
 			(void)doca_ctx_stop(resources->rdma_ctx);
 			return;
 		}
@@ -356,6 +367,11 @@ static void rdma_write_error_callback(struct doca_rdma_task_write *rdma_write_ta
 	if (resources->num_remaining_tasks == 0) {
 		if (resources->cfg->use_rdma_cm == true)
 			(void)rdma_cm_disconnect(resources);
+		for (int i = 0; i < PIPELINE_DEPTH; i++) {
+			if (resources->write_tasks[i] != NULL) {
+				doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+			}
+		}
 		(void)doca_ctx_stop(resources->rdma_ctx);
 	}
 }
@@ -385,6 +401,11 @@ static void rdma_send_error_callback(struct doca_rdma_task_send *rdma_send_task,
 	if (resources->num_remaining_tasks == 0) {
 		if (resources->cfg->use_rdma_cm == true)
 			(void)rdma_cm_disconnect(resources);
+		for (int i = 0; i < PIPELINE_DEPTH; i++) {
+			if (resources->write_tasks[i] != NULL) {
+				doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+			}
+		}
 		(void)doca_ctx_stop(resources->rdma_ctx);
 	}
 }
@@ -408,6 +429,11 @@ static void final_signal_sent_callback(struct doca_rdma_task_send *task,
 	if (resources->cfg->use_rdma_cm == true){
 				(void)rdma_cm_disconnect(resources);
             }
+	for (int i = 0; i < PIPELINE_DEPTH; i++) {
+		if (resources->write_tasks[i] != NULL) {
+			doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+		}
+	}
 	(void)doca_ctx_stop(resources->rdma_ctx);
     // The context will be stopped by the write callback when all writes are done.
 }
@@ -468,26 +494,8 @@ static doca_error_t rdma_write_prepare_and_submit_task(struct rdma_resources *re
 	doca_error_t result;//, tmp_result;
 
 	int data_idx = (NUM_TRANSFERS - resources->transfers_left);
-	// resources->cur_buf_idx = data_idx;//%NUM_CHUNKS_IN_BUFFER;
-	// resources->src_buf = resources->local_bufs[data_idx];
-	// resources->dst_buf = resources->remote_bufs[data_idx];
-	// struct doca_buf *current_src_buf = resources->local_bufs[data_idx];
-    // struct doca_buf *current_dst_buf = resources->remote_bufs[data_idx];
-	/* Include first_encountered_error in user data of task to be used in the callbacks */
-	// task_user_data.ptr = &(resources->first_encountered_error);
-	// /* Allocate and construct RDMA write task */
-	// result = doca_rdma_task_write_allocate_init(resources->rdma,
-	// 					    resources->connections[0],
-	// 					    resources->src_buf,
-	// 					    resources->dst_buf,
-	// 					    task_user_data,
-	// 					    &rdma_write_task);
-	// if (result != DOCA_SUCCESS) {
-		// 	DOCA_LOG_ERR("Failed to allocate RDMA write task: %s", doca_error_get_descr(result));
-		// 	goto free_task;
-		// }
 
-	long long int offset = MAX_BUFF_SIZE * ((NUM_TRANSFERS - resources->transfers_left)%NUM_CHUNKS_IN_BUFFER);
+	long long int offset = MAX_BUFF_SIZE * (data_idx % NUM_CHUNKS_IN_BUFFER);
 	
 	/* Add src buffer to DOCA buffer inventory from the remote mmap */
 	result = doca_buf_inventory_buf_get_by_data(resources->buf_inventory,
@@ -527,12 +535,7 @@ static doca_error_t rdma_write_prepare_and_submit_task(struct rdma_resources *re
 		resources->num_remaining_tasks--;
 
 	}
-
 	return result;
-
-// free_task:
-// 	doca_task_free(doca_rdma_task_write_as_task(rdma_write_task));
-// 	return result;
 }
 
 /*
@@ -615,11 +618,11 @@ static void rdma_write_requester_state_change_callback(const union doca_data use
 		// 	}
 		// 	// offset+=MAX_BUFF_SIZE;
 		// }
-		for (int i = 0; i < PIPELINE_DEPTH; i++) {
-			if (resources->write_tasks[i] != NULL) {
-				doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
-			}
-		}
+		// for (int i = 0; i < PIPELINE_DEPTH; i++) {
+		// 	if (resources->write_tasks[i] != NULL) {
+		// 		doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+		// 	}
+		// }
 		// printf("EEEE");
 		DOCA_LOG_INFO("RDMA context entered into stopping state. Any inflight tasks will be flushed sent_tasks = /%d/\n",counter);
 		break;
@@ -636,6 +639,11 @@ static void rdma_write_requester_state_change_callback(const union doca_data use
 	/* If something failed - update that an error was encountered and stop the ctx */
 	if (result != DOCA_SUCCESS) {
 		DOCA_ERROR_PROPAGATE(resources->first_encountered_error, result);
+		for (int i = 0; i < PIPELINE_DEPTH; i++) {
+			if (resources->write_tasks[i] != NULL) {
+				doca_task_free(doca_rdma_task_write_as_task(resources->write_tasks[i]));
+			}
+		}
 		(void)doca_ctx_stop(ctx);
 	}
 }
@@ -746,7 +754,6 @@ doca_error_t rdma_write_requester(struct rdma_config *cfg)
 		if (doca_pe_progress(resources.pe) == 0)
 			nanosleep(&ts, &ts);
 	}
-
 	/* Assign the result we update in the callbacks */
 	result = resources.first_encountered_error;
 
