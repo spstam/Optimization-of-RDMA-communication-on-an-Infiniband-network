@@ -32,12 +32,12 @@
 #include "rdma_common.h"
 
 DOCA_LOG_REGISTER(RDMA_WRITE_REQUESTER::SAMPLE);
-#define MAX_BUFF_SIZE 65536
+#define MAX_BUFF_SIZE (512 * 1024)
 
-#define NUM_TRANSFERS 100000
-#define PHYSICAL_BUFFER_SIZE 1024LL * 1024 * 1024
+#define NUM_TRANSFERS 1000000
+#define PHYSICAL_BUFFER_SIZE (1024LL * 1024 * 1024)
 #define NUM_CHUNKS_IN_BUFFER (PHYSICAL_BUFFER_SIZE / MAX_BUFF_SIZE)
-#define PIPELINE_DEPTH 128
+#define PIPELINE_DEPTH 32
 #define SIG_SIZE 8
 #define DATA_OFFSET 0
 #define SIGNAL_OFFSET 1024000008
@@ -540,9 +540,13 @@ doca_error_t rdma_write_requester(struct rdma_config *cfg)
 	 * rdma_write_requester_state_change_callback() When the context moves to idle, the context change callback call
 	 * will signal to stop running the progress engine.
 	 */
+	// while (resources.run_pe_progress) {
+	// 	if (doca_pe_progress(resources.pe) == 0)
+	// 		nanosleep(&ts, &ts);
+	// }
+	//removed sleep
 	while (resources.run_pe_progress) {
-		if (doca_pe_progress(resources.pe) == 0)
-			nanosleep(&ts, &ts);
+		doca_pe_progress(resources.pe);
 	}
 	/* Assign the result we update in the callbacks */
 	result = resources.first_encountered_error;
