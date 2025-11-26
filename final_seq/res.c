@@ -31,11 +31,11 @@
 
 #include "rdma_common.h"
 
-#define MAX_BUFF_SIZE (65536) /* Maximum DOCA buffer size */
+#define MAX_BUFF_SIZE (512 * 1024) /* Maximum DOCA buffer size */
 #define SIG_SIZE 8
 #define DATA_OFFSET 0
-#define NUM_TRANSFERS 100000
-#define PHYSICAL_BUFFER_SIZE 1024LL * 1024 * 1024
+#define NUM_TRANSFERS 1000000
+#define PHYSICAL_BUFFER_SIZE (1024LL * 1024 * 1024)
 #define NUM_CHUNKS_IN_BUFFER (PHYSICAL_BUFFER_SIZE / MAX_BUFF_SIZE)
 
 #define SIGNAL_OFFSET 1024000008
@@ -289,9 +289,12 @@ doca_error_t rdma_write_responder(struct rdma_config *cfg)
 	 * rdma_write_responder_state_change_callback() When the requester finishes writing, the user will signal to
 	 * stop running the progress engine.
 	 */
+	// while (resources.run_pe_progress) {
+	// 	if (doca_pe_progress(resources.pe) == 0)
+	// 		nanosleep(&ts, &ts);
+	// }
 	while (resources.run_pe_progress) {
-		if (doca_pe_progress(resources.pe) == 0)
-			nanosleep(&ts, &ts);
+		(doca_pe_progress(resources.pe) ;
 	}
 
 	/* Assign the result we update in the callbacks */
